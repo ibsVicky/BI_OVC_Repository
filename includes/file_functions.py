@@ -105,5 +105,6 @@ def check_filename(mask,filenamePrefix,filenameExtension,filenameFull):
     
     return file_name_check
 
-
 """********************************************************************"""
+def imprimir():
+    print("hola mundo")
