@@ -3,7 +3,7 @@ from pyspark.sql.types import StructType, StructField, StringType, DateType, Dec
 
 # Diccionario con los schemas
 fin_act_schs = {
-    "fin-act-raw": StructType([
+    "fin-act-raw-sapbr": StructType([
         StructField("SOURCE_SYSTEM_CODE", StringType(), True),
         StructField("COMPANY_CODE", StringType(), True),
         StructField("POSTING_DATE", StringType(), True),
@@ -31,7 +31,7 @@ fin_act_schs = {
         StructField("VENDOR_NAME", StringType(), True),
         StructField("COST_CENTER_NAME", StringType(), True)
     ]),
-    "fin-act-bronze": StructType([
+    "fin-act-bronze-sapbr": StructType([
         StructField("SOURCE_SYSTEM_CODE", StringType(), True),
         StructField("COMPANY_CODE", StringType(), True),
         StructField("POSTING_DATE", StringType(), True),

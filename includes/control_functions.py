@@ -7,7 +7,7 @@ spark = SparkSession.builder.getOrCreate()
 
 """********************************************************************"""
 
-def log_process_run_start(process_setup_name,process_setup_step_name,sys_modified_by_name):
+def log_process_run_start(process_setup_name,process_setup_step_name,source_system_code,sys_modified_by_name):
     try:
         #get process setup id
         query = ""
@@ -17,6 +17,7 @@ def log_process_run_start(process_setup_name,process_setup_step_name,sys_modifie
         query += " FROM `latam-md-finance`.control.sys_process_setup"
         query += " WHERE process_setup_name = '" + process_setup_name + "'"
         query += " AND process_setup_step_name = '" + process_setup_step_name + "'"
+        query += " AND source_system_code = '" + source_system_code + "'"
         query += " AND sys_status_code = 'A'"
 
         df = spark.sql(query)
@@ -148,6 +149,7 @@ def get_process_setup_parameters(process_setup_name,process_setup_step_name):
         query = "SELECT "
         query += " process_setup_source_layer,"
         query += " process_setup_source_bucket_name,"
+        query += " source_system_code,"
         query += " process_setup_source_bucket_folder_key,"
         query += " process_setup_source_file_name,"
         query += " process_setup_source_file_extension,"
