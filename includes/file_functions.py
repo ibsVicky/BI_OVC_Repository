@@ -62,9 +62,8 @@ def check_filename(mask,filenamePrefix,filenameExtension,filenameFull):
         if value == 1 and key == "yyyymmdd":
             start_index = file_name.find("_", len(file_name_already_validated)) + 1
             end_index = file_name.find("_", start_index)
-
             fecha_str = file_name[start_index:end_index]
-            
+
             try:
                 if len(fecha_str) == len("yyyymmdd"):
                     datetime.strptime(fecha_str, "%Y%m%d")
