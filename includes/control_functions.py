@@ -15,46 +15,25 @@ def log_process_run_start(process_setup_name,process_setup_step_name,source_syst
 
         query += "SELECT process_setup_id" 
         query += " FROM `latam-md-finance`.control.sys_process_setup"
-        query += " WHERE process_setup_name = '" + process_setup_name + "'"
-        query += " AND process_setup_step_name = '" + process_setup_step_name + "'"
-        query += " AND source_system_code = '" + source_system_code + "'"
-        query += " AND sys_status_code = 'A'"
+        query += " WHERE process_setup_name ilike '" + process_setup_name + "'"
+        query += " AND process_setup_step_name ilike '" + process_setup_step_name + "'"
+        query += " AND source_system_code ilike '" + source_system_code + "'"
+        query += " AND sys_status_code ilike 'A'"
 
-        df = spark.sql(query)
+        df = spark.sql(query.lower())
         row = df.first()
 
-        #if no records returns -1
+        #if no records returns False
         if row:
             process_setup_id = row["process_setup_id"]
         else:
             process_setup_id = -1
+            print(f"❌ NO PROCESS AVAILABLE IN control.sys_process_setup")
+            return process_setup_id, False
 
     except Exception as e:
         print(f"❌ ERROR GETTING PROCESS SETUP ID: {e}")
-        return False
-
-    try:    
-        #get id of last run processed
-        query = ""
-        df = []
-
-        query += "SELECT process_run_id" 
-        query += " FROM `latam-md-finance`.control.log_process_run"
-        query += " WHERE fk_process_setup_id = " + str(process_setup_id)
-        query += " AND process_run_last_flag = 1"
-
-        df = spark.sql(query)
-        row = df.first()
-
-        #if no records returns -1
-        if row:
-            process_run_id = row["process_run_id"]
-        else:
-            process_run_id = -1
-    
-    except Exception as e:
-        print(f"❌ ERROR GETTING LAST PROCESS RUN ID: {e}")
-        return False
+        return process_setup_id, False
 
     try:
         #insert new process run
@@ -79,7 +58,31 @@ def log_process_run_start(process_setup_name,process_setup_step_name,source_syst
     
     except Exception as e:
         print(f"❌ ERROR INSERTING RUN PROCESS LOG RECORD: {e}")
-        return False
+        return process_run_id, False
+
+    try:    
+        #get current process run
+        query = ""
+        df = []
+
+        query += "SELECT max(process_run_id) process_run_id" 
+        query += " FROM `latam-md-finance`.control.log_process_run"
+        query += " WHERE fk_process_setup_id = " + str(process_setup_id)
+        query += " AND process_run_last_flag = 1"
+
+        df = spark.sql(query)
+        row = df.first()
+
+        #if no records returns -1
+        if row:
+            process_run_id = row["process_run_id"]
+        else:
+            process_run_id = -1
+    
+    except Exception as e:
+        print(f"❌ ERROR GETTING LAST PROCESS RUN ID: {e}")
+        return process_run_id, False
+
 
     try:
         #SET PREV RUN PROCESSED OFF
@@ -90,31 +93,17 @@ def log_process_run_start(process_setup_name,process_setup_step_name,source_syst
         query += " SET process_run_last_flag = 0"
         query += " ,sys_modified_by_name = '" + sys_modified_by_name + "'"
         query += " ,sys_modified_on = '" + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "'"
-        query += " WHERE process_run_id = " + str(process_run_id) + ""
+        query += " WHERE fk_process_setup_id = " + str(process_setup_id) 
+        query += " AND process_run_id < " + str(process_run_id) 
+        query += " AND process_run_last_flag = 1"
 
         df = spark.sql(query)
 
     except Exception as e:
         print(f"❌ ERROR UPDATING RUN LAST FLAG OFF: {e}")
-        return False
+        return process_run_id, False
     
-    try:
-        #return run process id
-        query = ""
-        df = []
-
-        query += "SELECT process_run_id" 
-        query += " FROM `latam-md-finance`.control.log_process_run"
-        query += " WHERE fk_process_setup_id = " + str(process_setup_id)
-        query += " AND process_run_last_flag = 1"
-
-        df = spark.sql(query)
-
-        return df.select('process_run_id').collect()[0][0]
-
-    except Exception as e:
-        print(f"❌ ERROR GETTING LAST PROCESS RUN ID: {e}")
-        return False
+    return process_run_id, True
 
 """********************************************************************"""
 
@@ -171,8 +160,8 @@ def get_process_setup_parameters(process_setup_name,process_setup_step_name):
         query += " process_setup_archive_bucket_name,"
         query += " process_setup_archive_bucket_folder_key"
         query += " FROM `latam-md-finance`.control.sys_process_setup"
-        query += " WHERE process_setup_name = '" + process_setup_name + "'"
-        query += " AND process_setup_step_name = '" + process_setup_step_name + "'"
+        query += " WHERE process_setup_name ilike '" + process_setup_name + "'"
+        query += " AND process_setup_step_name ilike '" + process_setup_step_name + "'"
         query += " AND sys_status_code = 'A'"
 
         df = spark.sql(query)
@@ -191,7 +180,7 @@ def log_process_run_update_value(process_run_id,sys_modified_by_name,process_run
         df = []
 
         query += "UPDATE `latam-md-finance`.control.log_process_run" 
-        query += " SET " + process_run_column_name + " = " + str(process_run_column_value)
+        query += " SET " + process_run_column_name + " = '" + str(process_run_column_value) + "'"
         query += " ,sys_modified_by_name = '" + sys_modified_by_name + "'"
         query += " ,sys_modified_on = '" + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "'"
         query += " WHERE process_run_id = " + str(process_run_id) + ""
@@ -204,6 +193,5 @@ def log_process_run_update_value(process_run_id,sys_modified_by_name,process_run
         return False
 
 """********************************************************************"""
-
 
 
