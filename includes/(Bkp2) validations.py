@@ -191,13 +191,13 @@ def physical_validation(df_data, df_validations, process_run_id):
 
     # Divide entre validados y rechazados
     df_rejected = df_data.filter(F.col("rejection_reason") != "")
-    df_validated = df_data.filter(F.col("rejection_reason") == "").drop("rejection_reason")
+    df_validated = df_data.filter(F.col("rejection_reason") == "")
 
     return df_validated, df_rejected
 
 """******************************************************************************"""
 
-def business_validation_with_rejected(df_data, df_validations, process_run_id):
+def business_validation(df_data, df_validations, process_run_id):
     # Replace NULL with "UNSP" to avoid null issues
     src_data = df_data.fillna("UNSP")
     rejected_records = []
@@ -226,11 +226,11 @@ def business_validation_with_rejected(df_data, df_validations, process_run_id):
 
         except Exception as e:
             print(f"❌ ERROR TABLE NOT FOUND {master_name}: {e}")
-            df_with_ebs = df_data.withColumn(
+            df_invalid = df_data.withColumn(
                 "rejection_reasons",
                 F.lit(object_validation_id)
             )
-            rejected_records.append(df_with_ebs)
+            rejected_records.append(df_invalid)
             continue
 
         #Build join expression with values from rule details
@@ -307,135 +307,6 @@ def business_validation_with_rejected(df_data, df_validations, process_run_id):
                     ).drop("row_hash", "rejection_reason")
 
     return df_validated, df_rejected
-
-"""******************************************************************************"""
-
-def business_validation(df_data, df_validations, process_run_id):
-    # Reemplaza valores NULL con "UNSP" para evitar problemas de comparación en joins
-    src_data = df_data.fillna("UNSP")
-    rejected_records = []  # Lista donde se acumularán dataframes con registros rechazados o marcados
-
-    list_validations = df_validations.collect()  # Convierte el dataframe de validaciones a lista de objetos (filas)
-    cols = src_data.columns  # Lista de columnas del dataframe original
-
-    # Ejecuta cada validación configurada en df_validations
-    for validation in list_validations:
-        object_validation_id = validation["object_validation_id"]  # ID de la validación
-        master_name = validation["master_table_name"]              # Nombre de la tabla maestra
-        rule_code = validation["validation_rule_code"]             # Código de la regla
-        # Detalle de la regla: lista de tuplas [(col_src, col_trgt), ...]
-        rule_detail = ast.literal_eval(validation["validation_rule_detail"])
-
-        try:
-            # Obtiene los registros de la tabla maestra correspondiente
-            query = f"SELECT * FROM {master_name}"
-            # query += " WHERE sys_status_code = 'A'"  # Descomentar más adelante si aplica filtro
-
-            df_master = spark.sql(query)
-
-            # Renombra las columnas de la tabla maestra utilizadas en la validación
-            # Esto evita conflictos cuando tienen el mismo nombre que las columnas de src_data
-            df_master_renamed = df_master
-            for _, trgt_col in rule_detail:
-                if trgt_col in df_master.columns:
-                    df_master_renamed = df_master_renamed.withColumnRenamed(trgt_col, f"{trgt_col}_master")
-
-        except Exception as e:
-            # Si la tabla maestra no existe o falla el query, registra el error y continúa
-            print(f"❌ ERROR TABLE NOT FOUND {master_name}: {e}")
-            df_invalid = df_data.withColumn("rejection_reasons", F.lit(object_validation_id))
-            rejected_records.append(df_invalid)
-            continue
-
-        # Construye la expresión de join comparando columnas fuente con columnas de la tabla maestra
-        join_expr = None
-        for src_col, trgt_col in rule_detail:
-            cond = src_data[src_col] == df_master_renamed[f"{trgt_col}_master"]
-            join_expr = cond if join_expr is None else join_expr & cond  # Une condiciones con AND
-
-        # Aplica la validación: obtiene los registros de src_data que NO existen en la tabla maestra
-        df_with_ebs_temp = src_data.join(df_master_renamed, on=join_expr, how="left_anti")
-        
-        # Si no hay registros con error, pasa a la siguiente validación
-        if df_with_ebs_temp.limit(1).count() == 0:
-            continue
-
-        # Agrega motivo de rechazo y valores de error concatenados (para logging)
-        df_with_ebs = df_with_ebs_temp.select(*df_data.columns) \
-            .withColumn("rejection_reasons", F.lit(object_validation_id)) \
-            .withColumn("error_value", F.concat_ws("||", *[F.col(src_col) for src_col, _ in rule_detail]))
-        
-        # Agrega este dataframe (errores) a la lista de rechazados para loguear después
-        rejected_records.append(df_with_ebs)
-
-        # Genera un hash único por fila (para poder identificar y reemplazar luego)
-        # Se calcula ANTES de reemplazar los valores por TBD/UNSP
-        df_hash_eb = df_with_ebs_temp.withColumn(
-            "row_hash", F.sha2(F.concat_ws("||", *[F.col(c).cast("string") for c in cols]), 256)
-        )
-
-        # Reemplaza valores: mantiene "UNSP" si ya lo era, si no, marca como "TBD"
-        for src_col, _ in rule_detail:
-            df_hash_eb = df_hash_eb.withColumn(
-                src_col, F.when(F.col(src_col) == "UNSP", "UNSP").otherwise("TBD")
-            )
-
-        # Agrega este dataframe con las filas ya marcadas para aplicar los reemplazos en src_data
-        rejected_records.append(df_hash_eb)
-
-    # Si hubo registros rechazados o marcados
-    if rejected_records:
-        try:
-            # Inserta los errores en la tabla object_validation_error
-            for df in rejected_records:
-                # Solo los dataframes que contienen 'error_value' son logs de error reales
-                if "error_value" in df.columns and df.limit(1).count() > 0:
-                    object_validation_error_insert(
-                        df.select(
-                            *[c for c in df_data.columns if c in df.columns],
-                            "rejection_reasons",
-                            "error_value"
-                        ),
-                        process_run_id
-                    )
-        except Exception as e:
-            # Si falla la inserción, muestra el error y detiene el proceso
-            print(f"❌ ERROR INSERTING IN object_validation_error TABLE: {e}")
-            raise
-
-        # Agrega columna hash a TODO el dataframe original (para poder hacer el join final)
-        df_data_hashed = src_data.withColumn(
-            "row_hash",
-            F.sha2(F.concat_ws("||", *[F.col(c).cast("string") for c in cols]), 256)
-        )
-
-        df_marked_all = None  # Acumulará todas las filas con hash que deben reemplazarse
-        
-        # Une todos los dataframes marcados (con row_hash)
-        for df in rejected_records:
-            if "row_hash" in df.columns:
-                df_marked_all = df if df_marked_all is None else df_marked_all.unionByName(df)
-
-        # Si hay filas marcadas, las usa para reemplazar las originales en src_data
-        if df_marked_all is not None:
-            df_marked_all = df_marked_all.select("row_hash", *cols).dropDuplicates(["row_hash"])
-
-            # Join entre los datos originales (hashed) y los marcados con TBD/UNSP
-            df_joined = df_data_hashed.alias("src").join(df_marked_all.alias("marked"), on="row_hash", how="left")
-
-            # Reemplaza los valores originales con los marcados donde corresponda
-            df_validated = df_joined.select(
-                *[F.coalesce(F.col(f"marked.{c}"), F.col(f"src.{c}")).alias(c) for c in cols]
-            ).drop("rejection_reasons")
-        else:
-            # Si no hay registros marcados, devuelve los datos originales
-            df_validated = src_data
-    else:
-        # Si no hubo ningún error ni registro rechazado
-        df_validated = src_data
-
-    # Devuelve el dataframe validado, con TBD donde haya errores
-    return df_validated
 
 
 """******************************************************************************"""
