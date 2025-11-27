@@ -7,16 +7,16 @@ spark = SparkSession.builder.getOrCreate()
 
 """********************************************************************"""
 
-def log_process_run_start(process_source_name,process_step_name,source_system_code,sys_modified_by_name):
+def log_process_run_start(process_setup_name,process_setup_step_name,source_system_code,sys_modified_by_name):
     try:
         #get process setup id
         query = ""
         df = []
 
-        query += "SELECT process_source_id" 
-        query += " FROM `latam-md-finance`.control.sys_process_source"
-        query += " WHERE process_source_name ilike '" + process_source_name + "'"
-        query += " AND process_step_name ilike '" + process_step_name + "'"
+        query += "SELECT process_setup_id" 
+        query += " FROM `latam-md-finance`.control.sys_process_setup"
+        query += " WHERE process_setup_name ilike '" + process_setup_name + "'"
+        query += " AND process_setup_step_name ilike '" + process_setup_step_name + "'"
         query += " AND source_system_code ilike '" + source_system_code + "'"
         query += " AND sys_status_code ilike 'A'"
 
@@ -25,15 +25,15 @@ def log_process_run_start(process_source_name,process_step_name,source_system_co
 
         #if no records returns False
         if row:
-            process_source_id = row["process_source_id"]
+            process_setup_id = row["process_setup_id"]
         else:
-            process_source_id = -1
+            process_setup_id = -1
             print(f"❌ NO PROCESS AVAILABLE IN control.sys_process_setup")
-            return process_source_id, False
+            return process_setup_id, False
 
     except Exception as e:
         print(f"❌ ERROR GETTING PROCESS SETUP ID: {e}")
-        return process_source_id, False
+        return process_setup_id, False
 
     try:
         #insert new process run
@@ -47,7 +47,7 @@ def log_process_run_start(process_source_name,process_step_name,source_system_co
         query += "sys_created_by_name,"
         query += "sys_modified_by_name)"
 
-        query += "VALUES (" + str(process_source_id) + ","
+        query += "VALUES (" + str(process_setup_id) + ","
         query += "'" + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "',"
         query += str(1) + ","
         query += "'" + sys_modified_by_name + "',"
@@ -67,7 +67,7 @@ def log_process_run_start(process_source_name,process_step_name,source_system_co
 
         query += "SELECT max(process_run_id) process_run_id" 
         query += " FROM `latam-md-finance`.control.log_process_run"
-        query += " WHERE fk_process_setup_id = " + str(process_source_id)
+        query += " WHERE fk_process_setup_id = " + str(process_setup_id)
         query += " AND process_run_last_flag = 1"
 
         df = spark.sql(query)
@@ -93,7 +93,7 @@ def log_process_run_start(process_source_name,process_step_name,source_system_co
         query += " SET process_run_last_flag = 0"
         query += " ,sys_modified_by_name = '" + sys_modified_by_name + "'"
         query += " ,sys_modified_on = '" + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "'"
-        query += " WHERE fk_process_setup_id = " + str(process_source_id) 
+        query += " WHERE fk_process_setup_id = " + str(process_setup_id) 
         query += " AND process_run_id < " + str(process_run_id) 
         query += " AND process_run_last_flag = 1"
 
@@ -129,33 +129,46 @@ def log_process_run_end(process_run_id,sys_modified_by_name):
 
 """********************************************************************"""
 
-def get_process_source_parameters(process_source_name,process_step_name):
+def get_process_setup_parameters(process_setup_name,process_setup_step_name):
 
     try:
         query= ""
         df = []
 
         query = "SELECT "
-        query += " source_sharepoint_host_name,"
-        query += " source_sharepoint_site_relative,"
-        query += " source_sharepoint_drive,"
-        query += " source_sharepoint_file_path,"
-        query += " source_bucket_name,"
-        query += " source_bucket_folder_key,"
-        query += " target_bucket_name,"
-        query += " target_bucket_folder_key,"
-        query += " archive_bucket_name,"
-        query += " archive_bucket_folder_key"
-        query += " FROM `latam-md-finance`.control.sys_process_source"
-        query += " WHERE process_source_name ilike '" + process_source_name + "'"
-        query += " AND process_step_name ilike '" + process_step_name + "'"
+        query += " process_setup_source_layer,"
+        query += " process_setup_source_bucket_name,"
+        query += " source_system_code,"
+        query += " process_setup_source_bucket_folder_key,"
+        query += " process_setup_source_file_name,"
+        query += " process_setup_source_file_extension,"
+        query += " process_setup_source_file_delimiter,"
+        query += " process_setup_source_file_encoding,"
+        query += " process_setup_source_file_name_mask,"
+        query += " process_setup_source_file_schema,"
+        query += " process_setup_source_table_name,"
+        query += " process_setup_source_table_schema,"
+        query += " process_setup_source_table_catalog,"
+        query += " process_setup_source_data_definition,"
+        query += " process_setup_target_layer,"
+        query += " process_setup_target_table_name,"
+        query += " process_setup_target_table_schema,"
+        query += " process_setup_target_table_catalog,"
+        query += " process_setup_target_data_definition,"
+        query += " process_setup_target_bucket_name,"
+        query += " process_setup_target_bucket_folder_key,"
+        query += " process_setup_archive_bucket_name,"
+        query += " process_setup_archive_bucket_folder_key"
+        query += " FROM `latam-md-finance`.control.sys_process_setup"
+        query += " WHERE process_setup_name ilike '" + process_setup_name + "'"
+        query += " AND process_setup_step_name ilike '" + process_setup_step_name + "'"
         query += " AND sys_status_code = 'A'"
 
         df = spark.sql(query)
         return df
     
     except Exception as e:
-        print(f"❌ ERROR GETTING DATA FROM sys_process_source: {e}")
+        print(f"❌ ERROR GETTING DATA FROM sys_process_setup: {e}")
         return False
 
 """********************************************************************"""
