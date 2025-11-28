@@ -58,7 +58,8 @@ fin_act_schs = {
         StructField("VENDOR_CODE", StringType(), True),
         StructField("VENDOR_NAME", StringType(), True),
         StructField("COST_CENTER_NAME", StringType(), True),
-        StructField("DW_FILE_NAME", StringType(), False)
+        StructField("DW_FILE_NAME", StringType(), False),
+        StructField("DW_ROW_ID", StringType(), True)
     ]),
     "fin-act-silver": StructType([
         StructField("SOURCE_SYSTEM_CODE", StringType(), False),
@@ -87,7 +88,8 @@ fin_act_schs = {
         StructField("VENDOR_CODE", StringType(), True),
         StructField("VENDOR_NAME", StringType(), True),
         StructField("COST_CENTER_NAME", StringType(), True),
-        StructField("DW_FILE_NAME", StringType(), False)
+        StructField("DW_FILE_NAME", StringType(), False),
+        StructField("DW_ROW_ID", StringType(), True)
     ])
 }
 

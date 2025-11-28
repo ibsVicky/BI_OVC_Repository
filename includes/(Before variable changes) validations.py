@@ -13,14 +13,12 @@ def get_object_validation(process_run_id, object_validation_type):
         query = ""
         df = []
         
-        query = f"""
-                SELECT object_validation_id, object_name, validation_rule_code, validation_rule_detail, reject_all,master_table_name
-                FROM `latam-md-finance`.control.log_process_run run
-                INNER JOIN `latam-md-finance`.control.object_validation val ON val.fk_process_setup_id = run.fk_process_setup_id
-                WHERE run.process_run_id = {process_run_id}
-                AND val.object_validation_type = '{object_validation_type}'
-                AND val.sys_status_code = 'A'
-                """
+        query += "SELECT object_validation_id, object_name, validation_rule_code, validation_rule_detail, reject_all,master_table_name"
+        query += " FROM `latam-md-finance`.control.log_process_run run"
+        query += " INNER JOIN `latam-md-finance`.control.object_validation val ON val.fk_process_setup_id = run.fk_process_setup_id"
+        query += " WHERE run.process_run_id = " + str(process_run_id)
+        query += " AND val.object_validation_type = '" + object_validation_type + "'"
+        query += " AND val.sys_status_code = 'A'"
 
         df = spark.sql(query)
         return df
@@ -75,8 +73,6 @@ def build_validation_condition(rule_type,col_name,rule_detail):
         condition = F.expr(f"{col_name} {rule_detail}") | F.col(col_name).isNull()
     elif rule_type == 'not_null':
         condition = F.col(col_name).isNotNull()
-    elif rule_type == 'conditional_fail':
-        condition = F.expr(f"NOT ({rule_detail})") 
     else:
         return F.lit(True)
     
