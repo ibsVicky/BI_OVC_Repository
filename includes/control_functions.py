@@ -136,6 +136,7 @@ def get_process_source_parameters(process_source_name,process_step_name):
         df = []
 
         query = "SELECT "
+        query += " source_file_name_prefix,"
         query += " source_sharepoint_host_name,"
         query += " source_sharepoint_site_relative,"
         query += " source_sharepoint_drive,"
